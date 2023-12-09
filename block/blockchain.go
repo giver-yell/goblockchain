@@ -1,12 +1,15 @@
 package block
 
 import (
+	"crypto/ecdsa"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
 	"time"
+
+	"github.com/giver-yell/goblockchain/utils"
 )
 
 const (
@@ -92,9 +95,34 @@ func (bc *Blockchain) Print() {
 	fmt.Printf("%s\n", strings.Repeat("*", 25))
 }
 
-func (bc *Blockchain) AddTransaction(sender string, recipient string, value float32) {
+func (bc *Blockchain) AddTransaction(sender string, recipient string, value float32, senderPublicKey *ecdsa.PublicKey, s *utils.Signature) bool {
 	t := NewTransaction(sender, recipient, value)
-	bc.transactionPool = append(bc.transactionPool, t)
+
+	if sender == MINING_SENDER {
+		bc.transactionPool = append(bc.transactionPool, t)
+		return true
+	}
+
+	if bc.VerifyTransactionSignature(senderPublicKey, s, t) {
+		/* テスト中はコメントアウト
+		if bc.CalculateTotalAmount(sender) < value {
+			log.Println("Error: Not Enough Balance in a Wallet")
+			return false
+		}
+		*/
+		bc.transactionPool = append(bc.transactionPool, t)
+		return true
+	} else {
+		log.Println("Error: Verify Transaction")
+	}
+
+	return false
+}
+
+func (bc *Blockchain) VerifyTransactionSignature(senderPublicKey *ecdsa.PublicKey, s *utils.Signature, t *Transaction) bool {
+	m, _ := json.Marshal(t)
+	h := sha256.Sum256([]byte(m))
+	return ecdsa.Verify(senderPublicKey, h[:], s.R, s.S)
 }
 
 func (bc *Blockchain) CopyTransactionPool() []*Transaction {
@@ -128,7 +156,7 @@ func (bc *Blockchain) ProofOfWork() int {
 }
 
 func (bc *Blockchain) Mining() bool {
-	bc.AddTransaction(MINING_SENDER, bc.blockchainAddress, MINING_REWARD)
+	bc.AddTransaction(MINING_SENDER, bc.blockchainAddress, MINING_REWARD, nil, nil)
 	nonce := bc.ProofOfWork()
 	previousHash := bc.LastBlock().Hash()
 	bc.CreateBlock(nonce, previousHash)
@@ -136,7 +164,7 @@ func (bc *Blockchain) Mining() bool {
 	return true
 }
 
-func (bc *Blockchain) CaluculateTotalAmount(blockchainAddress string) float32 {
+func (bc *Blockchain) CalculateTotalAmount(blockchainAddress string) float32 {
 	totalAmount := float32(0.0)
 	for _, b := range bc.chain {
 		for _, t := range b.transactions {
