@@ -8,6 +8,7 @@ import (
 	"path"
 	"strconv"
 
+	"github.com/giver-yell/goblockchain/utils"
 	"github.com/giver-yell/goblockchain/wallet"
 )
 
@@ -53,8 +54,19 @@ func (ws *WalletServer) Wallet(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func (ws *WalletServer) CreateTransaction(w http.ResponseWriter, req *http.Request) {
+	switch req.Method {
+	case http.MethodPost:
+		io.WriteString(w, string(utils.JsonStatus("success")))
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		log.Println("ERROR: Invalid HTTP Method")
+	}
+}
+
 func (ws *WalletServer) Run() {
 	http.HandleFunc("/", ws.Index)
 	http.HandleFunc("/wallet", ws.Wallet)
+	http.HandleFunc("/transaction", ws.CreateTransaction)
 	log.Fatal(http.ListenAndServe("0.0.0.0:"+strconv.Itoa(int(ws.Port())), nil))
 }
