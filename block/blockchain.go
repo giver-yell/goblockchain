@@ -30,9 +30,9 @@ const (
 )
 
 type Block struct {
+	timestamp    int64
 	nonce        int
 	previousHash [32]byte
-	timestamp    int64
 	transactions []*Transaction
 }
 
@@ -58,9 +58,9 @@ func (b *Block) Transactions() []*Transaction {
 }
 
 func (b *Block) Print() {
-	fmt.Printf("timestamp:    %d\n", b.timestamp)
-	fmt.Printf("nonce:        %d\n", b.nonce)
-	fmt.Printf("previousHash:     %x\n", b.previousHash)
+	fmt.Printf("timestamp       %d\n", b.timestamp)
+	fmt.Printf("nonce           %d\n", b.nonce)
+	fmt.Printf("previous_hash   %x\n", b.previousHash)
 	for _, t := range b.transactions {
 		t.Print()
 	}
@@ -73,35 +73,35 @@ func (b *Block) Hash() [32]byte {
 
 func (b *Block) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
+		Timestamp    int64          `json:"timestamp"`
 		Nonce        int            `json:"nonce"`
 		PreviousHash string         `json:"previous_hash"`
-		Timestamp    int64          `json:"timestamp"`
 		Transactions []*Transaction `json:"transactions"`
 	}{
+		Timestamp:    b.timestamp,
 		Nonce:        b.nonce,
 		PreviousHash: fmt.Sprintf("%x", b.previousHash),
-		Timestamp:    b.timestamp,
 		Transactions: b.transactions,
 	})
 }
 
 func (b *Block) UnmarshalJSON(data []byte) error {
 	var previousHash string
-	v := struct {
+	v := &struct {
+		Timestamp    *int64          `json:"timestamp"`
 		Nonce        *int            `json:"nonce"`
 		PreviousHash *string         `json:"previous_hash"`
-		Timestamp    *int64          `json:"timestamp"`
 		Transactions *[]*Transaction `json:"transactions"`
 	}{
+		Timestamp:    &b.timestamp,
 		Nonce:        &b.nonce,
 		PreviousHash: &previousHash,
-		Timestamp:    &b.timestamp,
 		Transactions: &b.transactions,
 	}
 	if err := json.Unmarshal(data, &v); err != nil {
 		return err
 	}
-	ph, _ := hex.DecodeString(previousHash)
+	ph, _ := hex.DecodeString(*v.PreviousHash)
 	copy(b.previousHash[:], ph[:32])
 	return nil
 }
@@ -143,7 +143,6 @@ func (bc *Blockchain) SetNeighbors() {
 func (bc *Blockchain) SyncNeighbors() {
 	bc.muxNeighbors.Lock()
 	defer bc.muxNeighbors.Unlock()
-
 	bc.SetNeighbors()
 }
 
@@ -169,10 +168,10 @@ func (bc *Blockchain) MarshalJSON() ([]byte, error) {
 }
 
 func (bc *Blockchain) UnmarshalJSON(data []byte) error {
-	v := struct {
-		Blocks []*Block `json:"chain"`
+	v := &struct {
+		Blocks *[]*Block `json:"chain"`
 	}{
-		Blocks: bc.chain,
+		Blocks: &bc.chain,
 	}
 	if err := json.Unmarshal(data, &v); err != nil {
 		return err
@@ -244,16 +243,15 @@ func (bc *Blockchain) AddTransaction(sender string, recipient string, value floa
 	if bc.VerifyTransactionSignature(senderPublicKey, s, t) {
 		/* テスト中はコメントアウト
 		if bc.CalculateTotalAmount(sender) < value {
-			log.Println("Error: Not Enough Balance in a Wallet")
+			log.Println("ERROR: Not enough balance in a wallet")
 			return false
 		}
 		*/
 		bc.transactionPool = append(bc.transactionPool, t)
 		return true
 	} else {
-		log.Println("Error: Verify Transaction")
+		log.Println("ERROR: Verify Transaction")
 	}
-
 	return false
 }
 
@@ -324,13 +322,14 @@ func (bc *Blockchain) StartMining() {
 }
 
 func (bc *Blockchain) CalculateTotalAmount(blockchainAddress string) float32 {
-	totalAmount := float32(0.0)
+	var totalAmount float32 = 0.0
 	for _, b := range bc.chain {
 		for _, t := range b.transactions {
 			value := t.value
 			if blockchainAddress == t.recipientBlockchainAddress {
 				totalAmount += value
 			}
+
 			if blockchainAddress == t.senderBlockchainAddress {
 				totalAmount -= value
 			}
@@ -347,7 +346,8 @@ func (bc *Blockchain) ValidChain(chain []*Block) bool {
 		if b.previousHash != preBlock.Hash() {
 			return false
 		}
-		if !bc.ValidProof(b.nonce, b.previousHash, b.transactions, MINING_DIFFICULTY) {
+
+		if !bc.ValidProof(b.Nonce(), b.PreviousHash(), b.Transactions(), MINING_DIFFICULTY) {
 			return false
 		}
 
@@ -403,9 +403,9 @@ func NewTransaction(sender string, recipient string, value float32) *Transaction
 
 func (t *Transaction) Print() {
 	fmt.Printf("%s\n", strings.Repeat("-", 40))
-	fmt.Printf("senderBlockchainAddress:    %s\n", t.senderBlockchainAddress)
-	fmt.Printf("recipientBlockchainAddress: %s\n", t.recipientBlockchainAddress)
-	fmt.Printf("value:                      %.1f\n", t.value)
+	fmt.Printf(" sender_blockchain_address      %s\n", t.senderBlockchainAddress)
+	fmt.Printf(" recipient_blockchain_address   %s\n", t.recipientBlockchainAddress)
+	fmt.Printf(" value                          %.1f\n", t.value)
 }
 
 func (t *Transaction) MarshalJSON() ([]byte, error) {
@@ -421,7 +421,7 @@ func (t *Transaction) MarshalJSON() ([]byte, error) {
 }
 
 func (t *Transaction) UnmarshalJSON(data []byte) error {
-	v := struct {
+	v := &struct {
 		Sender    *string  `json:"sender_blockchain_address"`
 		Recipient *string  `json:"recipient_blockchain_address"`
 		Value     *float32 `json:"value"`
@@ -459,7 +459,7 @@ type AmountResponse struct {
 	Amount float32 `json:"amount"`
 }
 
-func (ar AmountResponse) MarshalJSON() ([]byte, error) {
+func (ar *AmountResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		Amount float32 `json:"amount"`
 	}{

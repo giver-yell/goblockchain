@@ -59,30 +59,29 @@ func (bcs *BlockchainServer) Transactions(w http.ResponseWriter, req *http.Reque
 		transactions := bc.TransactionPool()
 		m, _ := json.Marshal(struct {
 			Transactions []*block.Transaction `json:"transactions"`
-			Lenght       int                  `json:"length"`
+			Length       int                  `json:"length"`
 		}{
 			Transactions: transactions,
-			Lenght:       len(transactions),
+			Length:       len(transactions),
 		})
 		io.WriteString(w, string(m[:]))
 
 	case http.MethodPost:
-		decorder := json.NewDecoder(req.Body)
+		decoder := json.NewDecoder(req.Body)
 		var t block.TransactionRequest
-		err := decorder.Decode(&t)
+		err := decoder.Decode(&t)
 		if err != nil {
 			log.Printf("ERROR: %v", err)
 			io.WriteString(w, string(utils.JsonStatus("fail")))
 			return
 		}
 		if !t.Validate() {
-			log.Printf("ERROR: missing field(s)")
+			log.Println("ERROR: missing field(s)")
 			io.WriteString(w, string(utils.JsonStatus("fail")))
 			return
 		}
 		publicKey := utils.PublicKeyFromString(*t.SenderPublicKey)
 		signature := utils.SignatureFromString(*t.Signature)
-
 		bc := bcs.GetBlockchain()
 		isCreated := bc.CreateTransaction(*t.SenderBlockchainAddress, *t.RecipientBlockchainAddress, *t.Value, publicKey, signature)
 
@@ -96,24 +95,22 @@ func (bcs *BlockchainServer) Transactions(w http.ResponseWriter, req *http.Reque
 			m = utils.JsonStatus("success")
 		}
 		io.WriteString(w, string(m))
-
 	case http.MethodPut:
-		decorder := json.NewDecoder(req.Body)
+		decoder := json.NewDecoder(req.Body)
 		var t block.TransactionRequest
-		err := decorder.Decode(&t)
+		err := decoder.Decode(&t)
 		if err != nil {
 			log.Printf("ERROR: %v", err)
 			io.WriteString(w, string(utils.JsonStatus("fail")))
 			return
 		}
 		if !t.Validate() {
-			log.Printf("ERROR: missing field(s)")
+			log.Println("ERROR: missing field(s)")
 			io.WriteString(w, string(utils.JsonStatus("fail")))
 			return
 		}
 		publicKey := utils.PublicKeyFromString(*t.SenderPublicKey)
 		signature := utils.SignatureFromString(*t.Signature)
-
 		bc := bcs.GetBlockchain()
 		isUpdated := bc.AddTransaction(*t.SenderBlockchainAddress, *t.RecipientBlockchainAddress, *t.Value, publicKey, signature)
 
@@ -126,12 +123,10 @@ func (bcs *BlockchainServer) Transactions(w http.ResponseWriter, req *http.Reque
 			m = utils.JsonStatus("success")
 		}
 		io.WriteString(w, string(m))
-
 	case http.MethodDelete:
 		bc := bcs.GetBlockchain()
 		bc.ClearTransactionPool()
 		io.WriteString(w, string(utils.JsonStatus("success")))
-
 	default:
 		log.Printf("ERROR: Invalid HTTP Method blockchain_server transactions %v", req.Method)
 		w.WriteHeader(http.StatusBadRequest)
@@ -181,7 +176,7 @@ func (bcs *BlockchainServer) Amount(w http.ResponseWriter, req *http.Request) {
 		amount := bcs.GetBlockchain().CalculateTotalAmount(blockchainAddress)
 
 		ar := &block.AmountResponse{Amount: amount}
-		m, _ := json.Marshal(ar)
+		m, _ := ar.MarshalJSON()
 
 		w.Header().Add("Content-Type", "application/json")
 		io.WriteString(w, string(m[:]))
@@ -212,6 +207,7 @@ func (bcs *BlockchainServer) Consensus(w http.ResponseWriter, req *http.Request)
 
 func (bcs *BlockchainServer) Run() {
 	bcs.GetBlockchain().Run()
+
 	http.HandleFunc("/", bcs.GetChain)
 	http.HandleFunc("/transactions", bcs.Transactions)
 	http.HandleFunc("/mine", bcs.Mine)
